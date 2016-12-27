@@ -259,6 +259,15 @@ function ParagraphCtrl($scope, $rootScope, $route, $window, $routeParams, $locat
     $scope.dirtyText = undefined;
   };
 
+  $scope.downloadParagraph = function() {
+    if ($scope.isRunning($scope.paragraph)) {
+      alert('Paragraph is running.');
+      return;
+    }
+    console.log('Download node: %o paragraph: %o', $scope.note.id, $scope.paragraph.id);
+    saveAsService.downloadParagraph($scope.note.id, $scope.paragraph.id, $scope.note, $scope.note.name, 'csv');
+  };
+
   $scope.toggleEnableDisable = function(paragraph) {
     paragraph.config.enabled = !paragraph.config.enabled;
     commitParagraph(paragraph);
