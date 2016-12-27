@@ -18,7 +18,7 @@
 package org.apache.zeppelin.rest;
 
 import java.io.IOException;
-import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 
@@ -34,8 +34,10 @@ import javax.ws.rs.core.Context;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
 
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.zeppelin.annotation.ZeppelinApi;
+import org.apache.zeppelin.conf.ZeppelinConfiguration;
 import org.apache.zeppelin.dep.Repository;
 import org.apache.zeppelin.interpreter.InterpreterException;
 import org.apache.zeppelin.interpreter.InterpreterPropertyType;
@@ -78,6 +80,13 @@ public class InterpreterRestApi {
   @Path("setting")
   @ZeppelinApi
   public Response listSettings() {
+    HashSet<String> roles = SecurityUtils.getRoles();
+    ZeppelinConfiguration conf = ZeppelinConfiguration.create();
+
+    if (!conf.isAnonymousAllowed() && CollectionUtils.isEmpty(roles)) {
+      return new JsonResponse<>(Status.FORBIDDEN, "", "").build();
+    }
+
     return new JsonResponse<>(Status.OK, "", interpreterSettingManager.get()).build();
   }
 
