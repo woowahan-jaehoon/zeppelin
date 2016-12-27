@@ -67,6 +67,8 @@ import org.slf4j.LoggerFactory;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Lists;
+import com.google.gson.internal.StringMap;
 
 /**
  * Paragraph is a representation of an execution unit.
@@ -296,6 +298,54 @@ public class Paragraph extends Job implements Cloneable, JsonSerializable {
 
   public InterpreterResult getResult() {
     return (InterpreterResult) getReturn();
+  }
+
+  public List<String> getResultMessage() {
+    if (result != null) {
+      if (result instanceof InterpreterResult) {
+        return resultToCsv(((InterpreterResult) result).message());
+      } else if (result instanceof StringMap) {
+        StringMap resultMap = (StringMap) result;
+        if (resultMap.get("msg") != null) {
+          return generateStringList(resultToCsv(resultMap.get("msg").toString()));
+        } else {
+          return generateStringList("No data");
+        }
+      } else {
+        return generateStringList(result.toString());
+      }
+    } else {
+      return generateStringList("No data");
+    }
+  }
+
+  private List<String> generateStringList(String message) {
+    return Lists.newArrayList(message);
+  }
+
+  private List<String> resultToCsv(List<InterpreterResultMessage> messages) {
+    List<String> results = Lists.newArrayListWithExpectedSize(messages.size());
+    for (InterpreterResultMessage message : messages)
+      results.add(resultToCsv(message.getData()));
+
+    return results;
+  }
+
+  private String resultToCsv(String resultMessage) {
+    StringBuilder sb = new StringBuilder();
+    String[] lines = resultMessage.split("\n");
+
+    for (String eachLine: lines) {
+      String[] tokens = eachLine.split("\t");
+      String prefix = "";
+      for (String eachToken: tokens) {
+        sb.append(prefix).append("\"").append(eachToken.replace("\"", "'")).append("\"");
+        prefix = ",";
+      }
+      sb.append("\n");
+    }
+
+    return sb.toString();
   }
 
   @Override

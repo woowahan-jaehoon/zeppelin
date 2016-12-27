@@ -53,4 +53,32 @@ function SaveAsService(browserDetectService) {
       window.URL.revokeObjectURL(url);
     }
   };
+
+  this.downloadParagraph = function(noteId, paragraphId, content, filename, extension) {
+    if (browserDetectService.detectIE()) {
+      angular.element('body').append('<iframe id="SaveAsId" style="display: none"></iframe>');
+      let frameSaveAs = angular.element('body > iframe#SaveAsId')[0].contentWindow;
+      frameSaveAs.document.open('text/json', 'replace');
+      frameSaveAs.document.write(content);
+      frameSaveAs.document.close();
+      frameSaveAs.focus();
+      let t1 = Date.now();
+      frameSaveAs.document.execCommand('SaveAs', false, filename + '.' + extension);
+      let t2 = Date.now();
+
+      // This means, this version of IE dosen't support auto download of a file with extension provided in param
+      // falling back to ".txt"
+      if (t1 === t2) {
+        frameSaveAs.document.execCommand('SaveAs', true, filename + '.txt');
+      }
+      angular.element('body > iframe#SaveAsId').remove();
+    } else {
+      angular.element('body').append('<a id="SaveAsId"></a>');
+      let saveAsElement = angular.element('body > a#SaveAsId');
+      saveAsElement.attr('href', '/api/notebook/' + noteId + '/paragraph/' + paragraphId + '/download');
+      saveAsElement.attr('target', '_blank');
+      saveAsElement[0].click();
+      saveAsElement.remove();
+    }
+  };
 }
