@@ -464,7 +464,7 @@ public class RemoteInterpreterTest {
               new LinkedList<InterpreterContextRunner>(), null));
 
           synchronized (results) {
-            results.addAll(ret.message());
+//            results.addAll(ret.message());
             results.notify();
           }
           return null;
@@ -556,7 +556,7 @@ public class RemoteInterpreterTest {
               new LinkedList<InterpreterContextRunner>(), null));
 
           synchronized (results) {
-            results.addAll(ret.message());
+//            results.addAll(ret.message());
             results.notify();
           }
           return stmt;
