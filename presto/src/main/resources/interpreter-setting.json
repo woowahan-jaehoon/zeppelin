@@ -1,0 +1,36 @@
+[
+  {
+    "group": "presto",
+    "name": "presto",
+    "className": "org.apache.zeppelin.presto.PrestoInterpreter",
+    "properties": {
+      "presto.rows.max": {
+        "envName": null,
+        "propertyName": "presto.rows.max",
+        "defaultValue": "100000",
+        "description": "Max number of rows to download."
+      }
+    },
+    "editor": {
+      "language": "sql",
+      "editOnDblClick": false
+    }
+  },
+  {
+    "group": "presto",
+    "name": "sql",
+    "className": "org.apache.zeppelin.presto.PrestoInterpreter",
+    "properties": {
+      "presto.rows.max": {
+        "envName": null,
+        "propertyName": "presto.rows.max",
+        "defaultValue": "100000",
+        "description": "Max number of rows to download."
+      }
+    },
+    "editor":{
+      "language": "sql",
+      "editOnDblClick": false
+    }
+  }
+]
