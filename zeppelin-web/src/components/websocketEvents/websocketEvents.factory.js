@@ -63,6 +63,8 @@ function websocketEvents($rootScope, $websocket, $location, baseUrlSrv) {
       $location.path('/notebook/' + data.note.id);
     } else if (op === 'NOTES_INFO') {
       $rootScope.$broadcast('setNoteMenu', data.notes);
+    } else if (op === 'DEL_NOTE') {
+      $location.path('/#');
     } else if (op === 'LIST_NOTE_JOBS') {
       $rootScope.$broadcast('setNoteJobs', data.noteJobs);
     } else if (op === 'LIST_UPDATE_NOTE_JOBS') {
