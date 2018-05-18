@@ -58,6 +58,7 @@ public class PrestoInterpreter extends Interpreter {
   static final String PRESTOSERVER_SCHEMA = "presto.schema";
   static final String PRESTOSERVER_USER = "presto.user";
   static final String PRESTOSERVER_PASSWORD = "presto.password";
+  static final String PRESTOSERVER_SOURCE_PREFIX = "presto.source.prefix";
   static final String PRESTO_MAX_RESULT_ROW = "presto.notebook.rows.max";
   static final String PRESTO_MAX_ROW = "presto.rows.max";
   static final String PRESTO_RESULT_PATH = "presto.result.path";
@@ -67,6 +68,7 @@ public class PrestoInterpreter extends Interpreter {
   private int maxLimitRow = 100000;
   private String resultDataDir;
   private long expireResult;
+  private String prestoSourcePrefix;
 
   private JsonCodec<QueryResults> queryResultsCodec;
   private HttpClient httpClient;
@@ -228,6 +230,11 @@ public class PrestoInterpreter extends Interpreter {
         }
       }
 
+      prestoSourcePrefix = getProperty(PRESTOSERVER_SOURCE_PREFIX);
+      if (prestoSourcePrefix == null) {
+        prestoSourcePrefix = "zeppelin-";
+      }
+      
       resultDataDir = getProperty(PRESTO_RESULT_PATH);
       if (resultDataDir == null) {
         resultDataDir = "/tmp/zeppelin-" + System.getProperty("user.name");
@@ -264,7 +271,7 @@ public class PrestoInterpreter extends Interpreter {
         prestoSession = new ClientSession(
             prestoServer,
             getProperty(PRESTOSERVER_USER),
-            "zeppelin-" + userId,
+            prestoSourcePrefix + userId,
             "zeppelin-presto-interpreter",
             getProperty(PRESTOSERVER_CATALOG),
             getProperty(PRESTOSERVER_SCHEMA),

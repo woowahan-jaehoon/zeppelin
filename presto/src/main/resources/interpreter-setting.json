@@ -17,6 +17,12 @@
         "defaultValue": "Presto",
         "description": "Presto Username"
       },
+      "presto.source.prefix": {
+        "envName": null,
+        "propertyName": "presto.source.prefix",
+        "defaultValue": "zeppelin-",
+        "description": "Presto Source Prefix."
+      },
       "presto.catalog": {
         "envName": null,
         "propertyName": "presto.catalog",
