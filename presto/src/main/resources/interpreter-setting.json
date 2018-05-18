@@ -3,12 +3,55 @@
     "group": "presto",
     "name": "presto",
     "className": "org.apache.zeppelin.presto.PrestoInterpreter",
+    "defaultInterpreter": true,
     "properties": {
+      "presto.url": {
+        "envName": null,
+        "propertyName": "presto.url",
+        "defaultValue": "http://localhost:9090",
+        "description": "Presto URL"
+      },
+      "presto.user": {
+        "envName": null,
+        "propertyName": "presto.user",
+        "defaultValue": "Presto",
+        "description": "Presto Username"
+      },
+      "presto.catalog": {
+        "envName": null,
+        "propertyName": "presto.catalog",
+        "defaultValue": "hive",
+        "description": "Presto Catalog"
+      },
+      "presto.schema": {
+        "envName": null,
+        "propertyName": "presto.schema",
+        "defaultValue": "",
+        "description": "Presto Default Schema"
+      },
+      "presto.notebook.rows.max": {
+        "envName": null,
+        "propertyName": "presto.notebook.rows.max",
+        "defaultValue": "1000",
+        "description": "Max number of rows to show result."
+      },
       "presto.rows.max": {
         "envName": null,
         "propertyName": "presto.rows.max",
         "defaultValue": "100000",
         "description": "Max number of rows to download."
+      },
+      "presto.result.path": {
+        "envName": null,
+        "propertyName": "presto.result.path",
+        "defaultValue": "/tmp/zeppelin-user",
+        "description": "Path to save data to download."
+      },
+      "presto.result.expire.sec": {
+        "envName": null,
+        "propertyName": "presto.result.expire.sec",
+        "defaultValue": "172800",
+        "description": "Result expire time"
       }
     },
     "editor": {
@@ -20,14 +63,7 @@
     "group": "presto",
     "name": "sql",
     "className": "org.apache.zeppelin.presto.PrestoInterpreter",
-    "properties": {
-      "presto.rows.max": {
-        "envName": null,
-        "propertyName": "presto.rows.max",
-        "defaultValue": "100000",
-        "description": "Max number of rows to download."
-      }
-    },
+    "properties": {},
     "editor":{
       "language": "sql",
       "editOnDblClick": false
