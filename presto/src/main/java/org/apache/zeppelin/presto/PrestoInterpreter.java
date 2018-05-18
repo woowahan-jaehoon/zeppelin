@@ -16,10 +16,8 @@ package org.apache.zeppelin.presto;
 
 import com.facebook.presto.client.*;
 import com.google.common.collect.ImmutableMap;
-import io.airlift.http.client.*;
-import io.airlift.http.client.jetty.JettyHttpClient;
-import io.airlift.json.JsonCodec;
 import io.airlift.units.Duration;
+import okhttp3.OkHttpClient;
 import org.apache.commons.lang.StringUtils;
 import org.apache.zeppelin.interpreter.Interpreter;
 import org.apache.zeppelin.interpreter.InterpreterContext;
@@ -43,9 +41,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static io.airlift.http.client.HttpUriBuilder.uriBuilderFrom;
-import static io.airlift.http.client.Request.Builder.prepareDelete;
-import static io.airlift.json.JsonCodec.jsonCodec;
 
 /**
  * Presto interpreter for Zeppelin.
@@ -70,8 +65,7 @@ public class PrestoInterpreter extends Interpreter {
   private long expireResult;
   private String prestoSourcePrefix;
 
-  private JsonCodec<QueryResults> queryResultsCodec;
-  private HttpClient httpClient;
+  private OkHttpClient httpClient;
   private Map<String, ClientSession> prestoSessions = new HashMap<String, ClientSession>();
   private Exception exceptionOnConnect;
   private URI prestoServer;
@@ -250,10 +244,8 @@ public class PrestoInterpreter extends Interpreter {
       }
 
       prestoServer =  new URI(getProperty(PRESTOSERVER_URL));
-      queryResultsCodec = jsonCodec(QueryResults.class);
-      HttpClientConfig httpClientConfig = new HttpClientConfig();
-      httpClientConfig.setConnectTimeout(new Duration(10, TimeUnit.SECONDS));
-      httpClient = new JettyHttpClient(httpClientConfig);
+      OkHttpClient.Builder builder = new OkHttpClient.Builder();
+      httpClient = builder.build();
 
       cleanThread = new CleanResultFileThread();
       cleanThread.start();
@@ -291,10 +283,6 @@ public class PrestoInterpreter extends Interpreter {
   @Override
   public void close() {
     try {
-      if (httpClient != null) {
-        httpClient.close();
-      }
-
       cleanThread.interrupt();
     } finally {
       httpClient = null;
@@ -396,8 +384,7 @@ public class PrestoInterpreter extends Interpreter {
         return new InterpreterResult(Code.ERROR, exceptionOnConnect.getMessage());
       }
       ClientSession clientSession = getClientSession(context.getAuthenticationInfo().getUser());
-      StatementClient statementClient = new StatementClient(httpClient, queryResultsCodec,
-              clientSession, sql);
+      StatementClient statementClient = new StatementClient(httpClient, clientSession, sql);
       if (isExplainSql) {
         task.planStatement = statementClient;
       } else {
@@ -609,16 +596,7 @@ public class PrestoInterpreter extends Interpreter {
 
       logger.info("Kill query '" + task.getQueryResultId() + "'");
 
-      ResponseHandler handler = StringResponseHandler.createStringResponseHandler();
-      Request request = prepareDelete().setUri(
-          uriBuilderFrom(prestoServer).replacePath("/v1/query/" +
-              task.getQueryResultId()).build()).build();
-      try {
-        httpClient.execute(request, handler);
-        task.close();
-      } catch (Exception e) {
-        logger.error("Can not kill query " + task.getQueryResultId(), e);
-      }
+      task.sqlStatement.close();
     } finally {
       removeParagraph(context);
     }
