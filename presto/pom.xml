@@ -42,7 +42,7 @@
     <dependency>
       <groupId>com.facebook.presto</groupId>
       <artifactId>presto-client</artifactId>
-      <version>0.188</version>
+      <version>0.201</version>
     </dependency>
 
     <dependency>

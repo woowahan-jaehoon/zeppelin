@@ -15,7 +15,6 @@
 package org.apache.zeppelin.presto;
 
 import com.facebook.presto.client.*;
-import com.google.common.collect.ImmutableMap;
 import io.airlift.units.Duration;
 import okhttp3.OkHttpClient;
 import org.apache.commons.lang.StringUtils;
@@ -63,6 +62,7 @@ public class PrestoInterpreter extends Interpreter {
   private int maxLimitRow = 100000;
   private String resultDataDir;
   private long expireResult;
+  private String prestoUser;
   private String prestoSourcePrefix;
 
   private OkHttpClient httpClient;
@@ -81,8 +81,8 @@ public class PrestoInterpreter extends Interpreter {
   class ParagraphTask {
     StatementClient planStatement;
     StatementClient sqlStatement;
-    QueryResults sqlQueryResult;
-    QueryResults planQueryResult;
+    QueryData sqlQueryData;
+    QueryData planQueryData;
 
     AtomicBoolean reportProgress = new AtomicBoolean(false);
     AtomicBoolean queryCanceled = new AtomicBoolean(false);
@@ -92,11 +92,11 @@ public class PrestoInterpreter extends Interpreter {
       this.timestamp = System.currentTimeMillis();
     }
 
-    public void setQueryResult(boolean planQuery, QueryResults queryResults) {
+    public void setQueryData(boolean planQuery, QueryData queryData) {
       if (planQuery) {
-        planQueryResult = queryResults;
+        planQueryData = queryData;
       } else {
-        sqlQueryResult = queryResults;
+        sqlQueryData = queryData;
       }
     }
 
@@ -121,10 +121,10 @@ public class PrestoInterpreter extends Interpreter {
     }
 
     public String getQueryResultId() {
-      if (sqlQueryResult != null) {
-        return sqlQueryResult.getId();
-      } else if (planQueryResult != null) {
-        return planQueryResult.getId();
+      if (sqlQueryData != null) {
+        return sqlStatement.currentStatusInfo().getId();
+      } else if (planQueryData != null) {
+        return planStatement.currentStatusInfo().getId();
       } else {
         return null;
       }
@@ -194,6 +194,8 @@ public class PrestoInterpreter extends Interpreter {
   public void open() {
     logger.info("Presto interpreter open called!");
 
+    prestoUser = getProperty(PRESTOSERVER_USER);
+
     try {
       String maxRowsProperty = getProperty(PRESTO_MAX_RESULT_ROW);
       if (maxRowsProperty != null) {
@@ -262,16 +264,18 @@ public class PrestoInterpreter extends Interpreter {
       if (prestoSession == null) {
         prestoSession = new ClientSession(
             prestoServer,
-            getProperty(PRESTOSERVER_USER),
+            prestoUser,
             prestoSourcePrefix + userId,
-            "zeppelin-presto-interpreter",
+            Collections.singleton("zeppelin-presto-interpreter"),
+            "Zeppelin Presto Interpreter",
             getProperty(PRESTOSERVER_CATALOG),
             getProperty(PRESTOSERVER_SCHEMA),
             TimeZone.getDefault().getID(),
             Locale.getDefault(),
-            ImmutableMap.<String, String>of(),
+            Collections.<String, String>emptyMap(),
+            Collections.<String, String>emptyMap(),
+            Collections.<String, String>emptyMap(),
             null,
-            false,
             new Duration(10, TimeUnit.SECONDS));
 
         prestoSessions.put(userId, prestoSession);
@@ -384,7 +388,7 @@ public class PrestoInterpreter extends Interpreter {
         return new InterpreterResult(Code.ERROR, exceptionOnConnect.getMessage());
       }
       ClientSession clientSession = getClientSession(context.getAuthenticationInfo().getUser());
-      StatementClient statementClient = new StatementClient(httpClient, clientSession, sql);
+      StatementClient statementClient = StatementClientFactory.newStatementClient(httpClient, clientSession, sql);
       if (isExplainSql) {
         task.planStatement = statementClient;
       } else {
@@ -401,21 +405,20 @@ public class PrestoInterpreter extends Interpreter {
       if (resultFile.exists()) {
         resultFile.delete();
       }
-
-      while (statementClient.isValid()
+      while (statementClient.isRunning()
           && statementClient.advance()) {
-        QueryResults queryResults = statementClient.current();
-        task.setQueryResult(isExplainSql, queryResults);
+        QueryData queryData = statementClient.currentData();
+        task.setQueryData(isExplainSql, queryData);
 
         if (!task.reportProgress.get() && !isExplainSql) {
           task.reportProgress.set(true);
         }
-        Iterable<List<Object>> data  = queryResults.getData();
+        Iterable<List<Object>> data  = queryData.getData();
         if (data == null) {
           continue;
         }
         if (!alreadyPutColumnName) {
-          List<Column> columns = queryResults.getColumns();
+          List<Column> columns = statementClient.currentStatusInfo().getColumns();
           String prefix = "";
           for (Column eachColumn: columns) {
             msg.append(prefix).append(eachColumn.getName());
@@ -430,11 +433,9 @@ public class PrestoInterpreter extends Interpreter {
         resultFileMeta = processData(context, data, receivedRows,
             isSelectSql, isExplainSql, msg, resultFileMeta);
       }
-      QueryResults queryResults = statementClient.finalResults();
-      if (queryResults.getError() != null) {
-        return new InterpreterResult(Code.ERROR, queryResults.getError().getMessage());
+      if (statementClient.finalStatusInfo().getError() != null) {
+        return new InterpreterResult(Code.ERROR, statementClient.finalStatusInfo().getError().getMessage());
       }
-      task.setQueryResult(isExplainSql, queryResults);
       if (resultFileMeta != null) {
         resultFileMeta.outStream.close();
       }
@@ -610,10 +611,10 @@ public class PrestoInterpreter extends Interpreter {
   @Override
   public int getProgress(InterpreterContext context) {
     ParagraphTask task = getParagraphTask(context);
-    if (!task.reportProgress.get() || task.sqlQueryResult == null) {
+    if (!task.reportProgress.get() || task.sqlQueryData == null) {
       return 0;
     }
-    StatementStats stats = task.sqlQueryResult.getStats();
+    StatementStats stats = task.sqlStatement.getStats();
     if (stats.getTotalSplits() == 0) {
       return 0;
     } else {
