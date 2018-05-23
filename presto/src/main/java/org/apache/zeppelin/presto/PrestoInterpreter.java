@@ -63,25 +63,6 @@ public class PrestoInterpreter extends Interpreter {
   static final String PRESTO_RESULT_PATH = "presto.result.path";
   static final String PRESTO_RESULT_EXPIRE_SECONDS = "presto.result.expire.sec";
 
-  static {
-    Interpreter.register(
-        "presto",
-        "presto",
-        PrestoInterpreter.class.getName(),
-        new InterpreterPropertyBuilder()
-            .add(PRESTOSERVER_URL, "http://localhost:9090", "The URL for Presto")
-            .add(PRESTOSERVER_CATALOG, "hive", "Default catalog")
-            .add(PRESTOSERVER_SCHEMA, "default", "Default schema")
-            .add(PRESTOSERVER_USER, "Presto", "The Presto user")
-            .add(PRESTO_MAX_RESULT_ROW, "1000", "Maximum result rows on the notebook.")
-            .add(PRESTO_MAX_ROW, "100000", "Maximum result rows in a query.")
-            .add(PRESTO_RESULT_PATH, "/tmp/zeppelin-user", "Temporary directory for result data.")
-            .add(PRESTO_RESULT_EXPIRE_SECONDS, "172800",
-                    "Result data will be expire after this seconds. (Default 2 Days)")
-            .add(PRESTOSERVER_USER, "Presto", "The Presto user")
-            .add(PRESTOSERVER_PASSWORD, "", "The password for the Presto user").build());
-  }
-
   private int maxRowsinNotebook = 1000;
   private int maxLimitRow = 100000;
   private String resultDataDir;
