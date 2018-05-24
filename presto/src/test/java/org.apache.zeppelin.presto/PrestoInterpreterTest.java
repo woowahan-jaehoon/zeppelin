@@ -76,13 +76,13 @@ public class PrestoInterpreterTest {
     public void givenInvalidQuery_whenAddLimitClause_thenReturnGivenQueryTest() {
         //given
         String invalidQuery = "elect fro aa";
+        String expect = invalidQuery + " limit 100000";
 
         //when
         String actual = interpreter.addLimitClause(invalidQuery);
 
         //then
         Assert.assertThat(actual, is(notNullValue()));
-        Assert.assertThat(actual, is(invalidQuery));
+        Assert.assertThat(actual, is(expect));
     }
-
 }
