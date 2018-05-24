@@ -35,6 +35,7 @@ import javax.ws.rs.core.Response.Status;
 import com.google.gson.Gson;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang.exception.ExceptionUtils;
+import org.apache.zeppelin.conf.ZeppelinConfiguration;
 import org.apache.zeppelin.interpreter.InterpreterSettingManager;
 import org.apache.zeppelin.rest.message.RestartInterpreterRequest;
 import org.apache.zeppelin.utils.SecurityUtils;
@@ -77,7 +78,9 @@ public class InterpreterRestApi {
   @ZeppelinApi
   public Response listSettings() {
     HashSet<String> roles = SecurityUtils.getRoles();
-    if (CollectionUtils.isEmpty(roles)) {
+    ZeppelinConfiguration conf = ZeppelinConfiguration.create();
+
+    if (!conf.isAnonymousAllowed() && CollectionUtils.isEmpty(roles)) {
       return new JsonResponse<>(Status.FORBIDDEN, "", "").build();
     }
 
