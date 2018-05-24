@@ -379,7 +379,8 @@ public class PrestoInterpreter extends Interpreter {
       if (sql == null || sql.trim().isEmpty()) {
         return new InterpreterResult(Code.ERROR, "No query");
       }
-      InterpreterResult limitCheckResult = assertLimitClause(addLimitClause(sql));
+      String limitedSql = addLimitClause(sql);
+      InterpreterResult limitCheckResult = assertLimitClause(limitedSql);
       if (limitCheckResult.code() != Code.SUCCESS) {
         return limitCheckResult;
       }
@@ -388,7 +389,8 @@ public class PrestoInterpreter extends Interpreter {
         return new InterpreterResult(Code.ERROR, exceptionOnConnect.getMessage());
       }
       ClientSession clientSession = getClientSession(context.getAuthenticationInfo().getUser());
-      StatementClient statementClient = StatementClientFactory.newStatementClient(httpClient, clientSession, sql);
+      StatementClient statementClient =
+              StatementClientFactory.newStatementClient(httpClient, clientSession, limitedSql);
       if (isExplainSql) {
         task.planStatement = statementClient;
       } else {
@@ -441,7 +443,7 @@ public class PrestoInterpreter extends Interpreter {
       }
 
       InterpreterResult result = new InterpreterResult(Code.SUCCESS,
-          StringUtils.containsIgnoreCase(sql, "EXPLAIN ") ? msg.toString() :
+          StringUtils.containsIgnoreCase(limitedSql, "EXPLAIN ") ? msg.toString() :
               "%table " + msg.toString());
       return result;
     } catch (Exception ex) {
