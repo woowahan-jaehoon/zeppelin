@@ -19,10 +19,7 @@ import com.facebook.presto.client.*;
 import io.airlift.units.Duration;
 import okhttp3.OkHttpClient;
 import org.apache.commons.lang.StringUtils;
-import org.apache.zeppelin.interpreter.Interpreter;
-import org.apache.zeppelin.interpreter.InterpreterContext;
-import org.apache.zeppelin.interpreter.InterpreterPropertyBuilder;
-import org.apache.zeppelin.interpreter.InterpreterResult;
+import org.apache.zeppelin.interpreter.*;
 import org.apache.zeppelin.interpreter.InterpreterResult.Code;
 import org.apache.zeppelin.interpreter.thrift.InterpreterCompletion;
 import org.apache.zeppelin.scheduler.Scheduler;
@@ -48,6 +45,14 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class PrestoInterpreter extends Interpreter {
   private static final Logger logger = LoggerFactory.getLogger(PrestoInterpreter.class);
 
+  private static final String CAUTION_LOGO =
+          " ██████╗ █████╗ ██╗   ██╗████████╗██╗ ██████╗ ███╗   ██╗    ██╗    \n" +
+          "██╔════╝██╔══██╗██║   ██║╚══██╔══╝██║██╔═══██╗████╗  ██║    ██║    \n" +
+          "██║     ███████║██║   ██║   ██║   ██║██║   ██║██╔██╗ ██║    ██║    \n" +
+          "██║     ██╔══██║██║   ██║   ██║   ██║██║   ██║██║╚██╗██║    ╚═╝    \n" +
+          "╚██████╗██║  ██║╚██████╔╝   ██║   ██║╚██████╔╝██║ ╚████║    ██╗    \n" +
+          " ╚═════╝╚═╝  ╚═╝ ╚═════╝    ╚═╝   ╚═╝ ╚═════╝ ╚═╝  ╚═══╝    ╚═╝";
+
   private static final String PRESTOSERVER_URL = "presto.url";
   private static final String PRESTOSERVER_CATALOG = "presto.catalog";
   private static final String PRESTOSERVER_SCHEMA = "presto.schema";
@@ -59,14 +64,20 @@ public class PrestoInterpreter extends Interpreter {
   private static final String PRESTO_MAX_ROW = "presto.rows.max";
   private static final String PRESTO_RESULT_PATH = "presto.result.path";
   private static final String PRESTO_RESULT_EXPIRE_SECONDS = "presto.result.expire.sec";
+  private static final String PRESTO_HIGHLIGHT_LIMIT = "presto.highlight_limit";
+
+  static final String LIMIT_QUERY_HEAD = "SELECT * FROM (\n";
+  static final String LIMIT_QUERY_TAIL = "\n) ORIGINAL \nLIMIT ";
+  static final int DEFAULT_LIMIT_ROW = 100000;
 
   private int maxRowsinNotebook = 1000;
-  private int maxLimitRow = 100000;
+  private int maxLimitRow = DEFAULT_LIMIT_ROW;
   private String resultDataDir;
   private long expireResult;
   private String prestoUser;
   private String prestoSourcePrefix;
   private String timezone;
+  private boolean highlightLimit;
 
   private OkHttpClient httpClient;
   private final Map<String, ClientSession> prestoSessions = new HashMap<>();
@@ -222,7 +233,7 @@ public class PrestoInterpreter extends Interpreter {
           maxLimitRow = Integer.parseInt(maxLimitRowsProperty);
         } catch (Exception e) {
           logger.error("presto.rows.max property error: " + e.getMessage());
-          maxLimitRow = 100000;
+          maxLimitRow = DEFAULT_LIMIT_ROW;
         }
       }
 
@@ -239,7 +250,14 @@ public class PrestoInterpreter extends Interpreter {
       if (prestoSourcePrefix == null) {
         prestoSourcePrefix = "zeppelin-";
       }
-      
+
+      String highlightLimitProperty = getProperty(PRESTO_HIGHLIGHT_LIMIT);
+      if (highlightLimitProperty != null && !highlightLimitProperty.equals("")) {
+        highlightLimit = Boolean.valueOf(highlightLimitProperty);
+      } else {
+        highlightLimit = true;
+      }
+
       resultDataDir = getProperty(PRESTO_RESULT_PATH);
       if (resultDataDir == null) {
         resultDataDir = "/tmp/zeppelin-" + System.getProperty("user.name");
@@ -382,24 +400,30 @@ public class PrestoInterpreter extends Interpreter {
                                        InterpreterContext context,
                                        boolean isExplainSql,
                                        boolean isSelectSql) {
+    InterpreterOutput interpreterOutput = context.out();
     ResultFileMeta resultFileMeta = null;
     ParagraphTask task = getParagraphTask(context);
     try {
       if (sql == null || sql.trim().isEmpty()) {
         return new InterpreterResult(Code.ERROR, "No query");
       }
-      String limitedSql = addLimitClause(sql);
-      InterpreterResult limitCheckResult = assertLimitClause(limitedSql);
-      if (limitCheckResult.code() != Code.SUCCESS) {
-        return limitCheckResult;
+
+      QueryProcessResult queryProcessResult;
+      if (isSelectSql) {
+        queryProcessResult = addLimitClause(sql);
+      } else {
+        queryProcessResult = new QueryProcessResult(sql, "");
       }
+
+      if (queryProcessResult.getMessage() != null && !queryProcessResult.getMessage().equals(""))
+        writeToInterpreterOutput(interpreterOutput, queryProcessResult.getMessage());
 
       if (exceptionOnConnect != null) {
         return new InterpreterResult(Code.ERROR, exceptionOnConnect.getMessage());
       }
       ClientSession clientSession = getClientSession(context.getAuthenticationInfo().getUser());
       StatementClient statementClient =
-              StatementClientFactory.newStatementClient(httpClient, clientSession, limitedSql);
+              StatementClientFactory.newStatementClient(httpClient, clientSession, queryProcessResult.getQuery());
       if (isExplainSql) {
         task.planStatement = statementClient;
       } else {
@@ -452,7 +476,7 @@ public class PrestoInterpreter extends Interpreter {
       }
 
       InterpreterResult result = new InterpreterResult(Code.SUCCESS,
-          StringUtils.containsIgnoreCase(limitedSql, "EXPLAIN ") ? msg.toString() :
+          StringUtils.containsIgnoreCase(queryProcessResult.getQuery(), "EXPLAIN ") ? msg.toString() :
               "%table " + msg.toString());
       return result;
     } catch (Exception ex) {
@@ -534,61 +558,84 @@ public class PrestoInterpreter extends Interpreter {
     return resultFileMeta;
   }
 
-  private InterpreterResult assertLimitClause(String sql) {
+  QueryProcessResult addLimitClause(String sql) {
     String parsedSql = sql.trim().toLowerCase();
-    if (parsedSql.startsWith("show") || parsedSql.startsWith("desc") ||
-        parsedSql.startsWith("create") || parsedSql.startsWith("insert") ||
-        parsedSql.startsWith("explain")) {
-      return new InterpreterResult(Code.SUCCESS, "");
+
+    parsedSql = removeCommentInSql(parsedSql);
+    parsedSql = removeWhiteSpaceCharacter(parsedSql);
+
+    if (!parsedSql.contains("from")) {
+      return new QueryProcessResult(sql, "");
     }
-    if (parsedSql.startsWith("select")) {
-      parsedSql = parsedSql.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ');
-      String[] tokens = parsedSql.replace("   ", " ").replace("  ", " ").split(" ");
-      if (tokens.length < 2) {
-        return new InterpreterResult(Code.ERROR, "No limit clause.");
+
+    String[] tokens = parsedSql.trim().replaceAll(" +", " ")
+            .split(" ");
+
+    int limitLocation = getLastLimitTokenLocation(tokens);
+
+    if (limitLocation == -1) {
+      String cautionLogo = "";
+      if (highlightLimit) {
+        cautionLogo = CAUTION_LOGO;
       }
 
-      if (tokens[tokens.length - 2].trim().equals("limit")) {
-        int limit = Integer.parseInt(tokens[tokens.length - 1].trim());
-        if (limit > maxLimitRow) {
-          return new InterpreterResult(Code.ERROR, "Limit clause exceeds " + maxLimitRow);
-        } else {
-          return new InterpreterResult(Code.SUCCESS, "");
-        }
-      } else {
-        return new InterpreterResult(Code.ERROR, "No limit clause.");
-      }
+      return new QueryProcessResult(LIMIT_QUERY_HEAD + sql + LIMIT_QUERY_TAIL + maxLimitRow,
+              cautionLogo + "\n\n" +
+                      "No limit clause!\n" +
+                      "Please Add 'LIMIT' in Your Query!\n" +
+                      "('LIMIT " + maxLimitRow + "' is Applied)");
     }
-    return new InterpreterResult(Code.SUCCESS, "");
+
+    if (limitLocation == tokens.length - 1) {
+      throw new RuntimeException("Query is not completed: " + sql);
+    }
+
+    int limitValue;
+    try {
+      limitValue = Integer.parseInt(tokens[limitLocation + 1].trim());
+    } catch (Exception e) {
+      throw new RuntimeException("Query Error: " + sql);
+    }
+
+    if (limitValue > maxLimitRow) {
+      return new QueryProcessResult(LIMIT_QUERY_HEAD + sql + LIMIT_QUERY_TAIL + maxLimitRow,
+              "Limit clause exceeds " + maxLimitRow);
+    } else {
+      return new QueryProcessResult(sql, "");
+    }
   }
 
-  protected String addLimitClause(String sql) {
-    String parsedSql = sql.trim().toLowerCase();
-    if (parsedSql.startsWith("show") || parsedSql.startsWith("desc") ||
-            parsedSql.startsWith("create") || parsedSql.startsWith("insert") ||
-            parsedSql.startsWith("explain")) {
-      return sql;
+  private String removeCommentInSql(String source) {
+    StringBuilder result = new StringBuilder();
+    String commentType1RemovedSource = source
+            .replaceAll("/\\*(?:.|[\\r\\n])*?\\*/", "");
+
+    String[] splitCommentType1RemovedSource = commentType1RemovedSource.split("\n");
+    for (String line: splitCommentType1RemovedSource) {
+      result.append(line.replaceAll("--.*$", "")).append("\n");
     }
 
-    parsedSql = parsedSql.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ');
-    String[] tokens = parsedSql.replace("   ", " ").replace("  ", " ").split(" ");
+    return result.toString();
+  }
 
-    if (tokens.length < 2) {
-      return parsedSql;
-    }
+  private String removeWhiteSpaceCharacter(String source) {
+    return source
+            .replace('\n', ' ')
+            .replace('\r', ' ')
+            .replace('\t', ' ')
+            ;
+  }
 
-    if (tokens[tokens.length - 2].trim().equals("limit")) {
-      int limit = Integer.parseInt(tokens[tokens.length - 1].trim());
-      if (limit > maxLimitRow) {
-        tokens[tokens.length - 1] = String.valueOf(maxLimitRow);
-        return StringUtils.join(tokens, " ");
-      } else {
-        return parsedSql;
+  private int getLastLimitTokenLocation(String[] tokens) {
+    int limitLocation = -1;
+    for (int i = 0; i < tokens.length; ++i) {
+      if (tokens[i].equals("limit")) {
+        limitLocation = i;
       }
     }
-
-    return parsedSql + " limit " + maxLimitRow;
+    return limitLocation;
   }
+
 
   @Override
   public InterpreterResult interpret(String cmd, InterpreterContext context) {
@@ -650,4 +697,29 @@ public class PrestoInterpreter extends Interpreter {
     OutputStream outStream;
   }
 
+  private void writeToInterpreterOutput(InterpreterOutput interpreterOutput, String message) {
+    try {
+      interpreterOutput.write(message + "\n");
+    } catch (Exception e) {
+      logger.warn("InterpreterOutput Exception", e);
+    }
+  }
+
+  static class QueryProcessResult {
+    private String query;
+    private String message;
+
+    public QueryProcessResult(String query, String message) {
+      this.query = query;
+      this.message = message;
+    }
+
+    public String getQuery() {
+      return query;
+    }
+
+    public String getMessage() {
+      return message;
+    }
+  }
 }
