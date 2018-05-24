@@ -534,7 +534,7 @@ public class PrestoInterpreter extends Interpreter {
     }
     if (parsedSql.startsWith("select")) {
       parsedSql = parsedSql.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ');
-      String[] tokens = parsedSql.replace("   ", " ").replace("  ", " ").split(" ");
+      String[] tokens = parsedSql.replaceAll(" +", " ").split(" ");
       if (tokens.length < 2) {
         return new InterpreterResult(Code.ERROR, "No limit clause.");
       }
@@ -562,7 +562,7 @@ public class PrestoInterpreter extends Interpreter {
     }
 
     parsedSql = parsedSql.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ');
-    String[] tokens = parsedSql.replace("   ", " ").replace("  ", " ").split(" ");
+    String[] tokens = parsedSql.replaceAll(" +", " ").split(" ");
 
     if (tokens.length < 2) {
       return parsedSql;
