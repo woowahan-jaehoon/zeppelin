@@ -26,7 +26,7 @@ public class PrestoInterpreterTest {
         String sqlWithoutLimit = "SELECT * FROM test";
 
         //when
-        String actual = interpreter.addLimitClause(sqlWithoutLimit);
+        String actual = interpreter.addLimitClause(sqlWithoutLimit).getQuery();
 
         //then
         Assert.assertThat(actual, is(notNullValue()));
@@ -39,7 +39,7 @@ public class PrestoInterpreterTest {
         String sqlWithValidLimit = "SELECT * FROM test LIMIT 100";
 
         //when
-        String actual = interpreter.addLimitClause(sqlWithValidLimit);
+        String actual = interpreter.addLimitClause(sqlWithValidLimit).getQuery();
 
         //then
         Assert.assertThat(actual, is(notNullValue()));
@@ -52,7 +52,7 @@ public class PrestoInterpreterTest {
         String sqlWithInvalidLimit = "SELECT * FROM test LIMIT 59999999";
 
         //when
-        String actual = interpreter.addLimitClause(sqlWithInvalidLimit);
+        String actual = interpreter.addLimitClause(sqlWithInvalidLimit).getQuery();
 
         //then
         Assert.assertThat(actual, is(notNullValue()));
@@ -65,7 +65,7 @@ public class PrestoInterpreterTest {
         String notSelectQuery = "DESC testABC";
 
         //when
-        String actual = interpreter.addLimitClause(notSelectQuery);
+        String actual = interpreter.addLimitClause(notSelectQuery).getQuery();
 
         //then
         Assert.assertThat(actual, is(notNullValue()));
@@ -79,7 +79,7 @@ public class PrestoInterpreterTest {
         String expect = invalidQuery + " limit 100000";
 
         //when
-        String actual = interpreter.addLimitClause(invalidQuery);
+        String actual = interpreter.addLimitClause(invalidQuery).getQuery();
 
         //then
         Assert.assertThat(actual, is(notNullValue()));

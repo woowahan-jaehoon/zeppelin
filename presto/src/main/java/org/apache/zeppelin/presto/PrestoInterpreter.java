@@ -18,10 +18,7 @@ import com.facebook.presto.client.*;
 import io.airlift.units.Duration;
 import okhttp3.OkHttpClient;
 import org.apache.commons.lang.StringUtils;
-import org.apache.zeppelin.interpreter.Interpreter;
-import org.apache.zeppelin.interpreter.InterpreterContext;
-import org.apache.zeppelin.interpreter.InterpreterPropertyBuilder;
-import org.apache.zeppelin.interpreter.InterpreterResult;
+import org.apache.zeppelin.interpreter.*;
 import org.apache.zeppelin.interpreter.InterpreterResult.Code;
 import org.apache.zeppelin.interpreter.thrift.InterpreterCompletion;
 import org.apache.zeppelin.scheduler.Scheduler;
@@ -373,24 +370,23 @@ public class PrestoInterpreter extends Interpreter {
                                        InterpreterContext context,
                                        boolean isExplainSql,
                                        boolean isSelectSql) {
+    InterpreterOutput interpreterOutput = context.out();
     ResultFileMeta resultFileMeta = null;
     ParagraphTask task = getParagraphTask(context);
     try {
       if (sql == null || sql.trim().isEmpty()) {
         return new InterpreterResult(Code.ERROR, "No query");
       }
-      String limitedSql = addLimitClause(sql);
-      InterpreterResult limitCheckResult = assertLimitClause(limitedSql);
-      if (limitCheckResult.code() != Code.SUCCESS) {
-        return limitCheckResult;
-      }
+
+      QueryProcessResult queryProcessResult = addLimitClause(sql);
+      writeToInterpreterOutput(interpreterOutput, queryProcessResult.getMessage());
 
       if (exceptionOnConnect != null) {
         return new InterpreterResult(Code.ERROR, exceptionOnConnect.getMessage());
       }
       ClientSession clientSession = getClientSession(context.getAuthenticationInfo().getUser());
       StatementClient statementClient =
-              StatementClientFactory.newStatementClient(httpClient, clientSession, limitedSql);
+              StatementClientFactory.newStatementClient(httpClient, clientSession, queryProcessResult.getQuery());
       if (isExplainSql) {
         task.planStatement = statementClient;
       } else {
@@ -443,7 +439,7 @@ public class PrestoInterpreter extends Interpreter {
       }
 
       InterpreterResult result = new InterpreterResult(Code.SUCCESS,
-          StringUtils.containsIgnoreCase(limitedSql, "EXPLAIN ") ? msg.toString() :
+          StringUtils.containsIgnoreCase(queryProcessResult.getQuery(), "EXPLAIN ") ? msg.toString() :
               "%table " + msg.toString());
       return result;
     } catch (Exception ex) {
@@ -525,60 +521,33 @@ public class PrestoInterpreter extends Interpreter {
     return resultFileMeta;
   }
 
-  private InterpreterResult assertLimitClause(String sql) {
-    String parsedSql = sql.trim().toLowerCase();
-    if (parsedSql.startsWith("show") || parsedSql.startsWith("desc") ||
-        parsedSql.startsWith("create") || parsedSql.startsWith("insert") ||
-        parsedSql.startsWith("explain")) {
-      return new InterpreterResult(Code.SUCCESS, "");
-    }
-    if (parsedSql.startsWith("select")) {
-      parsedSql = parsedSql.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ');
-      String[] tokens = parsedSql.replaceAll(" +", " ").split(" ");
-      if (tokens.length < 2) {
-        return new InterpreterResult(Code.ERROR, "No limit clause.");
-      }
-
-      if (tokens[tokens.length - 2].trim().equals("limit")) {
-        int limit = Integer.parseInt(tokens[tokens.length - 1].trim());
-        if (limit > maxLimitRow) {
-          return new InterpreterResult(Code.ERROR, "Limit clause exceeds " + maxLimitRow);
-        } else {
-          return new InterpreterResult(Code.SUCCESS, "");
-        }
-      } else {
-        return new InterpreterResult(Code.ERROR, "No limit clause.");
-      }
-    }
-    return new InterpreterResult(Code.SUCCESS, "");
-  }
-
-  protected String addLimitClause(String sql) {
+  protected QueryProcessResult addLimitClause(String sql) {
     String parsedSql = sql.trim().toLowerCase();
     if (parsedSql.startsWith("show") || parsedSql.startsWith("desc") ||
             parsedSql.startsWith("create") || parsedSql.startsWith("insert") ||
             parsedSql.startsWith("explain")) {
-      return sql;
+      return new QueryProcessResult(sql, "");
     }
 
     parsedSql = parsedSql.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ');
     String[] tokens = parsedSql.replaceAll(" +", " ").split(" ");
 
     if (tokens.length < 2) {
-      return parsedSql;
+      return new QueryProcessResult(parsedSql, "No limit clause. Add 'limit " + maxLimitRow + "'");
     }
 
     if (tokens[tokens.length - 2].trim().equals("limit")) {
       int limit = Integer.parseInt(tokens[tokens.length - 1].trim());
       if (limit > maxLimitRow) {
         tokens[tokens.length - 1] = String.valueOf(maxLimitRow);
-        return StringUtils.join(tokens, " ");
+        return new QueryProcessResult(StringUtils.join(tokens, " "), "Limit clause exceeds " + maxLimitRow);
       } else {
-        return parsedSql;
+        return new QueryProcessResult(parsedSql, "");
       }
     }
 
-    return parsedSql + " limit " + maxLimitRow;
+    return new QueryProcessResult(parsedSql + " limit " + maxLimitRow,
+            "No limit clause. Add 'limit " + maxLimitRow + "'");
   }
 
   @Override
@@ -641,4 +610,29 @@ public class PrestoInterpreter extends Interpreter {
     OutputStream outStream;
   }
 
+  private void writeToInterpreterOutput(InterpreterOutput interpreterOutput, String message) {
+    try {
+      interpreterOutput.write(message + "\n");
+    } catch (Exception e) {
+      logger.warn("InterpreterOutput Exception", e);
+    }
+  }
+
+  static class QueryProcessResult {
+    private String query;
+    private String message;
+
+    public QueryProcessResult(String query, String message) {
+      this.query = query;
+      this.message = message;
+    }
+
+    public String getQuery() {
+      return query;
+    }
+
+    public String getMessage() {
+      return message;
+    }
+  }
 }
