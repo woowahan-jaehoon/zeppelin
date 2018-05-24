@@ -1,17 +1,18 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one or more contributor license
- * agreements. See the NOTICE file distributed with this work for additional information regarding
- * copyright ownership. The ASF licenses this file to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance with the License. You may obtain a
- * copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software distributed under the License
- * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
- * or implied. See the License for the specific language governing permissions and limitations under
- * the License.
+/*
+  Licensed to the Apache Software Foundation (ASF) under one or more contributor license
+  agreements. See the NOTICE file distributed with this work for additional information regarding
+  copyright ownership. The ASF licenses this file to you under the Apache License, Version 2.0 (the
+  "License"); you may not use this file except in compliance with the License. You may obtain a
+  copy of the License at
+
+  http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software distributed under the License
+  is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+  or implied. See the License for the specific language governing permissions and limitations under
+  the License.
  */
+
 package org.apache.zeppelin.presto;
 
 import com.facebook.presto.client.*;
@@ -42,18 +43,18 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Presto interpreter for Zeppelin.
  */
 public class PrestoInterpreter extends Interpreter {
-  Logger logger = LoggerFactory.getLogger(PrestoInterpreter.class);
+  private static final Logger logger = LoggerFactory.getLogger(PrestoInterpreter.class);
 
-  static final String PRESTOSERVER_URL = "presto.url";
-  static final String PRESTOSERVER_CATALOG = "presto.catalog";
-  static final String PRESTOSERVER_SCHEMA = "presto.schema";
-  static final String PRESTOSERVER_USER = "presto.user";
-  static final String PRESTOSERVER_PASSWORD = "presto.password";
-  static final String PRESTOSERVER_SOURCE_PREFIX = "presto.source.prefix";
-  static final String PRESTO_MAX_RESULT_ROW = "presto.notebook.rows.max";
-  static final String PRESTO_MAX_ROW = "presto.rows.max";
-  static final String PRESTO_RESULT_PATH = "presto.result.path";
-  static final String PRESTO_RESULT_EXPIRE_SECONDS = "presto.result.expire.sec";
+  private static final String PRESTOSERVER_URL = "presto.url";
+  private static final String PRESTOSERVER_CATALOG = "presto.catalog";
+  private static final String PRESTOSERVER_SCHEMA = "presto.schema";
+  private static final String PRESTOSERVER_USER = "presto.user";
+  private static final String PRESTOSERVER_PASSWORD = "presto.password";
+  private static final String PRESTOSERVER_SOURCE_PREFIX = "presto.source.prefix";
+  private static final String PRESTO_MAX_RESULT_ROW = "presto.notebook.rows.max";
+  private static final String PRESTO_MAX_ROW = "presto.rows.max";
+  private static final String PRESTO_RESULT_PATH = "presto.result.path";
+  private static final String PRESTO_RESULT_EXPIRE_SECONDS = "presto.result.expire.sec";
 
   private int maxRowsinNotebook = 1000;
   private int maxLimitRow = 100000;
@@ -63,19 +64,18 @@ public class PrestoInterpreter extends Interpreter {
   private String prestoSourcePrefix;
 
   private OkHttpClient httpClient;
-  private Map<String, ClientSession> prestoSessions = new HashMap<String, ClientSession>();
+  private final Map<String, ClientSession> prestoSessions = new HashMap<>();
   private Exception exceptionOnConnect;
   private URI prestoServer;
   private CleanResultFileThread cleanThread;
 
-  private Map<String, ParagraphTask> paragraphTasks =
-      new HashMap<String, ParagraphTask>();
+  private final Map<String, ParagraphTask> paragraphTasks = new HashMap<>();
 
   public PrestoInterpreter(Properties property) {
     super(property);
   }
 
-  class ParagraphTask {
+  private class ParagraphTask {
     StatementClient planStatement;
     StatementClient sqlStatement;
     QueryData sqlQueryData;
@@ -103,7 +103,7 @@ public class PrestoInterpreter extends Interpreter {
       if (planStatement != null) {
         try {
           planStatement.close();
-        } catch (Exception e) {
+        } catch (Exception ignored) {
         }
       }
       planStatement = null;
@@ -111,7 +111,7 @@ public class PrestoInterpreter extends Interpreter {
       if (sqlStatement != null) {
         try {
           sqlStatement.close();
-        } catch (Exception e) {
+        } catch (Exception ignored) {
         }
       }
       sqlStatement = null;
@@ -141,7 +141,7 @@ public class PrestoInterpreter extends Interpreter {
         }
         long currentTime = System.currentTimeMillis();
 
-        List<String> expiredParagraphIds = new ArrayList<String>();
+        List<String> expiredParagraphIds = new ArrayList<>();
         synchronized (paragraphTasks) {
           for (Map.Entry<String, ParagraphTask> entry : paragraphTasks.entrySet()) {
             ParagraphTask task = entry.getValue();
@@ -255,7 +255,7 @@ public class PrestoInterpreter extends Interpreter {
     }
   }
 
-  private ClientSession getClientSession(String userId) throws Exception {
+  private ClientSession getClientSession(String userId) {
     synchronized (prestoSessions) {
       ClientSession prestoSession = prestoSessions.get(userId);
       if (prestoSession == null) {
@@ -450,7 +450,7 @@ public class PrestoInterpreter extends Interpreter {
       if (resultFileMeta != null && resultFileMeta.outStream != null) {
         try {
           resultFileMeta.outStream.close();
-        } catch (IOException e) {
+        } catch (IOException ignored) {
         }
       }
     }
