@@ -51,6 +51,7 @@ public class PrestoInterpreter extends Interpreter {
   private static final String PRESTOSERVER_USER = "presto.user";
   private static final String PRESTOSERVER_PASSWORD = "presto.password";
   private static final String PRESTOSERVER_SOURCE_PREFIX = "presto.source.prefix";
+  private static final String PRESTOSERVER_TIMEZONE = "presto.timezone";
   private static final String PRESTO_MAX_RESULT_ROW = "presto.notebook.rows.max";
   private static final String PRESTO_MAX_ROW = "presto.rows.max";
   private static final String PRESTO_RESULT_PATH = "presto.result.path";
@@ -62,6 +63,7 @@ public class PrestoInterpreter extends Interpreter {
   private long expireResult;
   private String prestoUser;
   private String prestoSourcePrefix;
+  private String timezone;
 
   private OkHttpClient httpClient;
   private final Map<String, ClientSession> prestoSessions = new HashMap<>();
@@ -194,6 +196,13 @@ public class PrestoInterpreter extends Interpreter {
     prestoUser = getProperty(PRESTOSERVER_USER);
 
     try {
+      String timezoneProperty = getProperty(PRESTOSERVER_TIMEZONE);
+      if (timezoneProperty != null && !timezoneProperty.equals("")) {
+        timezone = TimeZone.getTimeZone(timezoneProperty).getID();
+      } else {
+        timezone = TimeZone.getDefault().getID();
+      }
+
       String maxRowsProperty = getProperty(PRESTO_MAX_RESULT_ROW);
       if (maxRowsProperty != null) {
         try {
@@ -267,7 +276,7 @@ public class PrestoInterpreter extends Interpreter {
             "Zeppelin Presto Interpreter",
             getProperty(PRESTOSERVER_CATALOG),
             getProperty(PRESTOSERVER_SCHEMA),
-            TimeZone.getDefault().getID(),
+            timezone,
             Locale.getDefault(),
             Collections.<String, String>emptyMap(),
             Collections.<String, String>emptyMap(),

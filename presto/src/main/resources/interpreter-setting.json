@@ -35,6 +35,12 @@
         "defaultValue": "",
         "description": "Presto Default Schema"
       },
+      "presto.timezone": {
+        "envName": null,
+        "propertyName": "presto.timezone",
+        "defaultValue": "",
+        "description": "Presto Default TimeZone"
+      },
       "presto.notebook.rows.max": {
         "envName": null,
         "propertyName": "presto.notebook.rows.max",
