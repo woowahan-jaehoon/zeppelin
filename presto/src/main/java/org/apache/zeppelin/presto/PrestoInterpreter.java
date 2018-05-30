@@ -92,10 +92,8 @@ public class PrestoInterpreter extends Interpreter {
   }
 
   private class ParagraphTask {
-    StatementClient planStatement;
     StatementClient sqlStatement;
     QueryData sqlQueryData;
-    QueryData planQueryData;
 
     AtomicBoolean reportProgress = new AtomicBoolean(false);
     AtomicBoolean queryCanceled = new AtomicBoolean(false);
@@ -105,25 +103,13 @@ public class PrestoInterpreter extends Interpreter {
       this.timestamp = System.currentTimeMillis();
     }
 
-    public void setQueryData(boolean planQuery, QueryData queryData) {
-      if (planQuery) {
-        planQueryData = queryData;
-      } else {
-        sqlQueryData = queryData;
-      }
+    public void setQueryData(QueryData queryData) {
+      sqlQueryData = queryData;
     }
 
     public synchronized void close() {
       reportProgress.set(false);
       queryCanceled.set(true);
-      if (planStatement != null) {
-        try {
-          planStatement.close();
-        } catch (Exception ignored) {
-        }
-      }
-      planStatement = null;
-
       if (sqlStatement != null) {
         try {
           sqlStatement.close();
@@ -136,8 +122,6 @@ public class PrestoInterpreter extends Interpreter {
     public String getQueryResultId() {
       if (sqlQueryData != null) {
         return sqlStatement.currentStatusInfo().getId();
-      } else if (planQueryData != null) {
-        return planStatement.currentStatusInfo().getId();
       } else {
         return null;
       }
@@ -347,59 +331,12 @@ public class PrestoInterpreter extends Interpreter {
     }
   }
 
-  private InterpreterResult checkAclAndExecuteSql(String sql,
-                                                  InterpreterContext context) {
-    ParagraphTask task = getParagraphTask(context);
-    task.reportProgress.set(false);
-    task.queryCanceled.set(false);
-    boolean isSelectSql = isStartsWith(sql, "select");
-    boolean isExplainSql = isStartsWith(sql, "explain");
-
-    try {
-      if (isExplainSql) {
-        return executeSql(sql, context, true, isSelectSql);
-      } else {
-        String planSql = "explain " + sql;
-        InterpreterResult planResult = executeSql(planSql, context, true, isSelectSql);
-        if (planResult.code() == Code.ERROR) {
-          return planResult;
-        }
-
-        if (!task.queryCanceled.get()) {
-          isSelectSql = isSelectQuery(isSelectSql, planResult.toString());
-          return executeSql(sql, context, false, isSelectSql);
-        } else {
-          return new InterpreterResult(Code.ERROR, "Query canceled.");
-        }
-      }
-    } finally {
-      task.close();
-    }
-  }
-
-  private boolean isSelectQuery(boolean isSelectSql, String planQueryResult) {
-    if (isSelectSql) {
-      return isSelectSql;
-    }
-
-    boolean isCUDTypePlan
-      = StringUtils.containsIgnoreCase(planQueryResult, "TableWriter");
-
-    return !isCUDTypePlan;
-  }
-
-  private boolean isStartsWith(String sql, String prefix) {
-    if (sql == null) {
-      return false;
-    }
-
-    return sql.trim().toLowerCase().startsWith(prefix);
-  }
-
   private InterpreterResult executeSql(String sql,
-                                       InterpreterContext context,
-                                       boolean isExplainSql,
-                                       boolean isSelectSql) {
+                                       InterpreterContext context) {
+    String sqlForTest = convertSqlForTest(sql);
+
+    boolean isSelectSql = sqlForTest.startsWith("select") || sqlForTest.startsWith("with");
+
     InterpreterOutput interpreterOutput = context.out();
     ResultFileMeta resultFileMeta = null;
     ParagraphTask task = getParagraphTask(context);
@@ -424,11 +361,8 @@ public class PrestoInterpreter extends Interpreter {
       ClientSession clientSession = getClientSession(context.getAuthenticationInfo().getUser());
       StatementClient statementClient =
               StatementClientFactory.newStatementClient(httpClient, clientSession, queryProcessResult.getQuery());
-      if (isExplainSql) {
-        task.planStatement = statementClient;
-      } else {
-        task.sqlStatement = statementClient;
-      }
+
+      task.sqlStatement = statementClient;
       StringBuilder msg = new StringBuilder();
 
       boolean alreadyPutColumnName = false;
@@ -443,9 +377,9 @@ public class PrestoInterpreter extends Interpreter {
       while (statementClient.isRunning()
           && statementClient.advance()) {
         QueryData queryData = statementClient.currentData();
-        task.setQueryData(isExplainSql, queryData);
+        task.setQueryData(queryData);
 
-        if (!task.reportProgress.get() && !isExplainSql) {
+        if (!task.reportProgress.get()) {
           task.reportProgress.set(true);
         }
         Iterable<List<Object>> data  = queryData.getData();
@@ -466,7 +400,7 @@ public class PrestoInterpreter extends Interpreter {
         }
 
         resultFileMeta = processData(context, data, receivedRows,
-            isSelectSql, isExplainSql, msg, resultFileMeta);
+            isSelectSql, msg, resultFileMeta);
       }
       if (statementClient.finalStatusInfo().getError() != null) {
         return new InterpreterResult(Code.ERROR, statementClient.finalStatusInfo().getError().getMessage());
@@ -515,12 +449,11 @@ public class PrestoInterpreter extends Interpreter {
       Iterable<List<Object>> data,
       AtomicInteger receivedRows,
       boolean isSelectSql,
-      boolean isExplainSql,
       StringBuilder msg,
       ResultFileMeta resultFileMeta) throws IOException {
     for (List<Object> row : data) {
       receivedRows.incrementAndGet();
-      if (receivedRows.get() > maxRowsinNotebook && isSelectSql && resultFileMeta == null) {
+      if (receivedRows.get() > maxRowsinNotebook && resultFileMeta == null) {
         resultFileMeta = new ResultFileMeta();
         resultFileMeta.filePath =
             resultDataDir + "/" + context.getNoteId() + "_" + context.getParagraphId();
@@ -541,7 +474,7 @@ public class PrestoInterpreter extends Interpreter {
         if (receivedRows.get() > maxRowsinNotebook) {
           resultFileMeta.outStream.write((csvDelimiter + "\"" + colStr + "\"").getBytes("UTF-8"));
         } else {
-          msg.append(delimiter).append(isExplainSql ? col.toString() : colStr);
+          msg.append(delimiter).append(!isSelectSql ? col.toString() : colStr);
         }
 
         if (delimiter.isEmpty()) {
@@ -559,16 +492,13 @@ public class PrestoInterpreter extends Interpreter {
   }
 
   QueryProcessResult addLimitClause(String sql) {
-    String parsedSql = sql.trim().toLowerCase();
+    String sqlForTest = convertSqlForTest(sql);
 
-    parsedSql = removeCommentInSql(parsedSql);
-    parsedSql = removeWhiteSpaceCharacter(parsedSql);
-
-    if (!parsedSql.contains("from")) {
+    if (!sqlForTest.contains("from")) {
       return new QueryProcessResult(sql, "");
     }
 
-    String[] tokens = parsedSql.trim().replaceAll(" +", " ")
+    String[] tokens = sqlForTest.replaceAll(" +", " ")
             .split(" ");
 
     int limitLocation = getLastLimitTokenLocation(tokens);
@@ -603,6 +533,15 @@ public class PrestoInterpreter extends Interpreter {
     } else {
       return new QueryProcessResult(sql, "");
     }
+  }
+
+  private String convertSqlForTest(String source) {
+    String convertedSql = source.trim().toLowerCase();
+
+    convertedSql = removeCommentInSql(convertedSql);
+    convertedSql = removeWhiteSpaceCharacter(convertedSql);
+
+    return convertedSql.trim();
   }
 
   private String removeCommentInSql(String source) {
@@ -642,14 +581,14 @@ public class PrestoInterpreter extends Interpreter {
     AuthenticationInfo authInfo = context.getAuthenticationInfo();
     String user = authInfo == null ? "anonymous" : authInfo.getUser();
     logger.info("Run SQL command user['" + user + "'], [" + cmd + "]");
-    return checkAclAndExecuteSql(cmd, context);
+    return executeSql(cmd, context);
   }
 
   @Override
   public void cancel(InterpreterContext context) {
     ParagraphTask task = getParagraphTask(context);
     try {
-      if (task.planStatement == null && task.sqlStatement == null) {
+      if (task.sqlStatement == null) {
         return;
       }
 
