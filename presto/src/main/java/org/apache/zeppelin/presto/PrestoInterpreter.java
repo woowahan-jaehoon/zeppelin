@@ -57,8 +57,12 @@ public class PrestoInterpreter extends Interpreter {
   private static final String PRESTO_RESULT_PATH = "presto.result.path";
   private static final String PRESTO_RESULT_EXPIRE_SECONDS = "presto.result.expire.sec";
 
+  static final String LIMIT_QUERY_HEAD = "SELECT * FROM (\n";
+  static final String LIMIT_QUERY_TAIL = "\n) ORIGINAL \nLIMIT ";
+  static final int DEFAULT_LIMIT_ROW = 100000;
+
   private int maxRowsinNotebook = 1000;
-  private int maxLimitRow = 100000;
+  private int maxLimitRow = DEFAULT_LIMIT_ROW;
   private String resultDataDir;
   private long expireResult;
   private String prestoUser;
@@ -219,7 +223,7 @@ public class PrestoInterpreter extends Interpreter {
           maxLimitRow = Integer.parseInt(maxLimitRowsProperty);
         } catch (Exception e) {
           logger.error("presto.rows.max property error: " + e.getMessage());
-          maxLimitRow = 100000;
+          maxLimitRow = DEFAULT_LIMIT_ROW;
         }
       }
 
@@ -387,8 +391,15 @@ public class PrestoInterpreter extends Interpreter {
         return new InterpreterResult(Code.ERROR, "No query");
       }
 
-      QueryProcessResult queryProcessResult = addLimitClause(sql);
-      writeToInterpreterOutput(interpreterOutput, queryProcessResult.getMessage());
+      QueryProcessResult queryProcessResult;
+      if (isSelectSql) {
+        queryProcessResult = addLimitClause(sql);
+      } else {
+        queryProcessResult = new QueryProcessResult(sql, "");
+      }
+
+      if (queryProcessResult.getMessage() != null && !queryProcessResult.getMessage().equals(""))
+        writeToInterpreterOutput(interpreterOutput, queryProcessResult.getMessage());
 
       if (exceptionOnConnect != null) {
         return new InterpreterResult(Code.ERROR, exceptionOnConnect.getMessage());
@@ -530,34 +541,78 @@ public class PrestoInterpreter extends Interpreter {
     return resultFileMeta;
   }
 
-  protected QueryProcessResult addLimitClause(String sql) {
+  QueryProcessResult addLimitClause(String sql) {
     String parsedSql = sql.trim().toLowerCase();
-    if (parsedSql.startsWith("show") || parsedSql.startsWith("desc") ||
-            parsedSql.startsWith("create") || parsedSql.startsWith("insert") ||
-            parsedSql.startsWith("explain")) {
+
+    parsedSql = removeCommentInSql(parsedSql);
+    parsedSql = removeWhiteSpaceCharacter(parsedSql);
+
+    if (!parsedSql.contains("from")) {
       return new QueryProcessResult(sql, "");
     }
 
-    parsedSql = parsedSql.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ');
-    String[] tokens = parsedSql.replaceAll(" +", " ").split(" ");
+    String[] tokens = parsedSql.trim().replaceAll(" +", " ")
+            .split(" ");
 
-    if (tokens.length < 2) {
-      return new QueryProcessResult(parsedSql, "No limit clause. Add 'limit " + maxLimitRow + "'");
+    int limitLocation = getLastLimitTokenLocation(tokens);
+
+    if (limitLocation == -1) {
+      return new QueryProcessResult(LIMIT_QUERY_HEAD + sql + LIMIT_QUERY_TAIL + maxLimitRow,
+              "No limit clause!\n" +
+                      "Please Add 'LIMIT' in Your Query!\n" +
+                      "('LIMIT " + maxLimitRow + "' is Applied)");
     }
 
-    if (tokens[tokens.length - 2].trim().equals("limit")) {
-      int limit = Integer.parseInt(tokens[tokens.length - 1].trim());
-      if (limit > maxLimitRow) {
-        tokens[tokens.length - 1] = String.valueOf(maxLimitRow);
-        return new QueryProcessResult(StringUtils.join(tokens, " "), "Limit clause exceeds " + maxLimitRow);
-      } else {
-        return new QueryProcessResult(parsedSql, "");
+    if (limitLocation == tokens.length - 1) {
+      throw new RuntimeException("Query is not completed: " + sql);
+    }
+
+    int limitValue;
+    try {
+      limitValue = Integer.parseInt(tokens[limitLocation + 1].trim());
+    } catch (Exception e) {
+      throw new RuntimeException("Query Error: " + sql);
+    }
+
+    if (limitValue > maxLimitRow) {
+      return new QueryProcessResult(LIMIT_QUERY_HEAD + sql + LIMIT_QUERY_TAIL + maxLimitRow,
+              "Limit clause exceeds " + maxLimitRow);
+    } else {
+      return new QueryProcessResult(sql, "");
+    }
+  }
+
+  private String removeCommentInSql(String source) {
+    StringBuilder result = new StringBuilder();
+    String commentType1RemovedSource = source
+            .replaceAll("/\\*(?:.|[\\r\\n])*?\\*/", "");
+
+    String[] splitCommentType1RemovedSource = commentType1RemovedSource.split("\n");
+    for (String line: splitCommentType1RemovedSource) {
+      result.append(line.replaceAll("--.*$", "")).append("\n");
+    }
+
+    return result.toString();
+  }
+
+  private String removeWhiteSpaceCharacter(String source) {
+    return source
+            .replace('\n', ' ')
+            .replace('\r', ' ')
+            .replace('\t', ' ')
+            ;
+  }
+
+  private int getLastLimitTokenLocation(String[] tokens) {
+    int limitLocation = -1;
+    for (int i = 0; i < tokens.length; ++i) {
+      if (tokens[i].equals("limit")) {
+        limitLocation = i;
       }
     }
-
-    return new QueryProcessResult(parsedSql + " limit " + maxLimitRow,
-            "No limit clause. Add 'limit " + maxLimitRow + "'");
+    return limitLocation;
   }
+
 
   @Override
   public InterpreterResult interpret(String cmd, InterpreterContext context) {
