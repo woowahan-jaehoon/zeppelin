@@ -11,6 +11,9 @@ import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.core.IsNull.notNullValue;
 
 public class PrestoInterpreterTest {
+    private static final int DEFAULT_LIMIT = PrestoInterpreter.DEFAULT_LIMIT_ROW;
+    private static final String LIMIT_QUERY_HEAD = PrestoInterpreter.LIMIT_QUERY_HEAD;
+    private static final String LIMIT_QUERY_TAIL = PrestoInterpreter.LIMIT_QUERY_TAIL + DEFAULT_LIMIT;
 
     private PrestoInterpreter interpreter;
 
@@ -24,13 +27,14 @@ public class PrestoInterpreterTest {
     public void givenWithoutLimitClause_whenAddLimitClause_thenReturnSqlQueryWithDefaultLimit() throws Exception {
         //given
         String sqlWithoutLimit = "SELECT * FROM test";
+        String expect = LIMIT_QUERY_HEAD + sqlWithoutLimit + LIMIT_QUERY_TAIL;
 
         //when
         String actual = interpreter.addLimitClause(sqlWithoutLimit).getQuery();
 
         //then
         Assert.assertThat(actual, is(notNullValue()));
-        Assert.assertThat(actual, is("select * from test limit 100000"));
+        Assert.assertThat(actual, is(expect));
     }
 
     @Test
@@ -43,20 +47,21 @@ public class PrestoInterpreterTest {
 
         //then
         Assert.assertThat(actual, is(notNullValue()));
-        Assert.assertThat(actual, is("select * from test limit 100"));
+        Assert.assertThat(actual, is(sqlWithValidLimit));
     }
 
     @Test
     public void givenWithInvalidLimitClause_whenAddLimitClause_thenReturnSqlQueryWithDefaultLimit() throws Exception {
         //given
         String sqlWithInvalidLimit = "SELECT * FROM test LIMIT 59999999";
+        String expect = LIMIT_QUERY_HEAD + sqlWithInvalidLimit + LIMIT_QUERY_TAIL;
 
         //when
         String actual = interpreter.addLimitClause(sqlWithInvalidLimit).getQuery();
 
         //then
         Assert.assertThat(actual, is(notNullValue()));
-        Assert.assertThat(actual, is("select * from test limit 100000"));
+        Assert.assertThat(actual, is(expect));
     }
 
     @Test
@@ -76,7 +81,21 @@ public class PrestoInterpreterTest {
     public void givenInvalidQuery_whenAddLimitClause_thenReturnGivenQueryTest() {
         //given
         String invalidQuery = "elect fro aa";
-        String expect = invalidQuery + " limit 100000";
+
+        //when
+        String actual = interpreter.addLimitClause(invalidQuery).getQuery();
+
+        //then
+        Assert.assertThat(actual, is(notNullValue()));
+        Assert.assertThat(actual, is(invalidQuery));
+    }
+
+
+    @Test
+    public void givenCommentQuery_whenAddLimitClause_thenReturnGivenQueryTest() {
+        //given
+        String invalidQuery = "select * from sbbi.dim_rgn_cd -- limit 100";
+        String expect = LIMIT_QUERY_HEAD + invalidQuery + LIMIT_QUERY_TAIL;
 
         //when
         String actual = interpreter.addLimitClause(invalidQuery).getQuery();
