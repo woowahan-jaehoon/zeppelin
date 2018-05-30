@@ -45,6 +45,14 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class PrestoInterpreter extends Interpreter {
   private static final Logger logger = LoggerFactory.getLogger(PrestoInterpreter.class);
 
+  private static final String CAUTION_LOGO =
+          " ██████╗ █████╗ ██╗   ██╗████████╗██╗ ██████╗ ███╗   ██╗    ██╗    \n" +
+          "██╔════╝██╔══██╗██║   ██║╚══██╔══╝██║██╔═══██╗████╗  ██║    ██║    \n" +
+          "██║     ███████║██║   ██║   ██║   ██║██║   ██║██╔██╗ ██║    ██║    \n" +
+          "██║     ██╔══██║██║   ██║   ██║   ██║██║   ██║██║╚██╗██║    ╚═╝    \n" +
+          "╚██████╗██║  ██║╚██████╔╝   ██║   ██║╚██████╔╝██║ ╚████║    ██╗    \n" +
+          " ╚═════╝╚═╝  ╚═╝ ╚═════╝    ╚═╝   ╚═╝ ╚═════╝ ╚═╝  ╚═══╝    ╚═╝";
+
   private static final String PRESTOSERVER_URL = "presto.url";
   private static final String PRESTOSERVER_CATALOG = "presto.catalog";
   private static final String PRESTOSERVER_SCHEMA = "presto.schema";
@@ -56,6 +64,7 @@ public class PrestoInterpreter extends Interpreter {
   private static final String PRESTO_MAX_ROW = "presto.rows.max";
   private static final String PRESTO_RESULT_PATH = "presto.result.path";
   private static final String PRESTO_RESULT_EXPIRE_SECONDS = "presto.result.expire.sec";
+  private static final String PRESTO_HIGHLIGHT_LIMIT = "presto.highlight_limit";
 
   static final String LIMIT_QUERY_HEAD = "SELECT * FROM (\n";
   static final String LIMIT_QUERY_TAIL = "\n) ORIGINAL \nLIMIT ";
@@ -68,6 +77,7 @@ public class PrestoInterpreter extends Interpreter {
   private String prestoUser;
   private String prestoSourcePrefix;
   private String timezone;
+  private boolean highlightLimit;
 
   private OkHttpClient httpClient;
   private final Map<String, ClientSession> prestoSessions = new HashMap<>();
@@ -240,7 +250,14 @@ public class PrestoInterpreter extends Interpreter {
       if (prestoSourcePrefix == null) {
         prestoSourcePrefix = "zeppelin-";
       }
-      
+
+      String highlightLimitProperty = getProperty(PRESTO_HIGHLIGHT_LIMIT);
+      if (highlightLimitProperty != null && !highlightLimitProperty.equals("")) {
+        highlightLimit = Boolean.valueOf(highlightLimitProperty);
+      } else {
+        highlightLimit = true;
+      }
+
       resultDataDir = getProperty(PRESTO_RESULT_PATH);
       if (resultDataDir == null) {
         resultDataDir = "/tmp/zeppelin-" + System.getProperty("user.name");
@@ -557,8 +574,14 @@ public class PrestoInterpreter extends Interpreter {
     int limitLocation = getLastLimitTokenLocation(tokens);
 
     if (limitLocation == -1) {
+      String cautionLogo = "";
+      if (highlightLimit) {
+        cautionLogo = CAUTION_LOGO;
+      }
+
       return new QueryProcessResult(LIMIT_QUERY_HEAD + sql + LIMIT_QUERY_TAIL + maxLimitRow,
-              "No limit clause!\n" +
+              cautionLogo + "\n\n" +
+                      "No limit clause!\n" +
                       "Please Add 'LIMIT' in Your Query!\n" +
                       "('LIMIT " + maxLimitRow + "' is Applied)");
     }

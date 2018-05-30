@@ -64,6 +64,12 @@
         "propertyName": "presto.result.expire.sec",
         "defaultValue": "172800",
         "description": "Result expire time"
+      },
+      "presto.highlight_limit": {
+        "envName": null,
+        "propertyName": "presto.highlight_limit",
+        "defaultValue": "true",
+        "description": "Highlighting Limit"
       }
     },
     "editor": {
