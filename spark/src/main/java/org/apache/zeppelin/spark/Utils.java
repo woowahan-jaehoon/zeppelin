@@ -18,6 +18,7 @@
 package org.apache.zeppelin.spark;
 
 import org.apache.zeppelin.interpreter.InterpreterContext;
+import org.apache.zeppelin.user.AuthenticationInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -109,6 +110,22 @@ class Utils {
   }
 
   public static String buildJobGroupId(InterpreterContext context) {
-    return "zeppelin-" + context.getParagraphId();
+    String userIdAndHyphen = "";
+    if (context.getAuthenticationInfo() != null) {
+      userIdAndHyphen = getUserName(context.getAuthenticationInfo()) + "-";
+    }
+
+    return "zeppelin-" + userIdAndHyphen + context.getNoteId() + "-" + context.getParagraphId();
+  }
+
+  public static String getUserName(AuthenticationInfo info) {
+    String uName = "";
+    if (info != null) {
+      uName = info.getUser();
+    }
+    if (uName == null || uName.isEmpty()) {
+      uName = "anonymous";
+    }
+    return uName;
   }
 }
