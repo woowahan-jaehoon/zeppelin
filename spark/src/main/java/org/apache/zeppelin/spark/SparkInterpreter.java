@@ -1228,10 +1228,6 @@ public class SparkInterpreter extends Interpreter {
     return obj;
   }
 
-  String getJobGroup(InterpreterContext context){
-    return "zeppelin-" + context.getParagraphId();
-  }
-
   /**
    * Interpret a single line.
    */
@@ -1252,7 +1248,7 @@ public class SparkInterpreter extends Interpreter {
   public InterpreterResult interpret(String[] lines, InterpreterContext context) {
     synchronized (this) {
       z.setGui(context.getGui());
-      sc.setJobGroup(getJobGroup(context), "Zeppelin", false);
+      sc.setJobGroup(Utils.buildJobGroupId(context), "Zeppelin", false);
       InterpreterResult r = interpretInput(lines, context);
       sc.clearJobGroup();
       return r;
@@ -1353,7 +1349,7 @@ public class SparkInterpreter extends Interpreter {
 
   @Override
   public void cancel(InterpreterContext context) {
-    sc.cancelJobGroup(getJobGroup(context));
+    sc.cancelJobGroup(Utils.buildJobGroupId(context));
   }
 
   @Override
