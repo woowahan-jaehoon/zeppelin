@@ -28,10 +28,7 @@ import org.apache.zeppelin.user.AuthenticationInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.OutputStream;
+import java.io.*;
 import java.net.URI;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
@@ -416,7 +413,12 @@ public class PrestoInterpreter extends Interpreter {
     } catch (Exception ex) {
       ex.printStackTrace();
       logger.error("Can not run " + sql, ex);
-      return new InterpreterResult(Code.ERROR, ex.getMessage());
+
+      StringWriter errorStringWriter = new StringWriter();
+      PrintWriter errorPrintWriter = new PrintWriter(errorStringWriter);
+      ex.printStackTrace(errorPrintWriter);
+
+      return new InterpreterResult(Code.ERROR, errorStringWriter.toString());
     } finally {
       if (resultFileMeta != null && resultFileMeta.outStream != null) {
         try {
