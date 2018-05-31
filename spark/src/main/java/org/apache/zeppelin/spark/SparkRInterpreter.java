@@ -99,10 +99,6 @@ public class SparkRInterpreter extends Interpreter {
     renderOptions = getProperty("zeppelin.R.render.options");
   }
 
-  String getJobGroup(InterpreterContext context){
-    return "zeppelin-" + context.getParagraphId();
-  }
-
   @Override
   public InterpreterResult interpret(String lines, InterpreterContext interpreterContext) {
 
@@ -126,7 +122,7 @@ public class SparkRInterpreter extends Interpreter {
       }
     }
 
-    String jobGroup = getJobGroup(interpreterContext);
+    String jobGroup = Utils.buildJobGroupId(interpreterContext);
     String setJobGroup = "";
     // assign setJobGroup to dummy__, otherwise it would print NULL for this statement
     if (Utils.isSpark2()) {
@@ -179,7 +175,7 @@ public class SparkRInterpreter extends Interpreter {
   @Override
   public void cancel(InterpreterContext context) {
     if (this.sc != null) {
-      sc.cancelJobGroup(getJobGroup(context));
+      sc.cancelJobGroup(Utils.buildJobGroupId(context));
     }
   }
 
