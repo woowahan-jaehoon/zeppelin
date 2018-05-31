@@ -149,7 +149,12 @@ class Utils {
   }
   
   public static String buildJobGroupId(InterpreterContext context) {
-    return "zeppelin-" + context.getNoteId() + "-" + context.getParagraphId();
+    String userIdAndHyphen = "";
+    if (context.getAuthenticationInfo() != null) {
+      userIdAndHyphen = getUserName(context.getAuthenticationInfo()) + "-";
+    }
+
+    return "zeppelin-" + userIdAndHyphen + context.getNoteId() + "-" + context.getParagraphId();
   }
 
   public static String getNoteId(String jobgroupId) {
