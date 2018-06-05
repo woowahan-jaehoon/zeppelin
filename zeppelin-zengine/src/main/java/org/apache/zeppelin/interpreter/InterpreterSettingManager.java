@@ -1027,6 +1027,13 @@ public class InterpreterSettingManager {
         List<InterpreterSetting> interpreterSettingList =
             nameInterpreterSettingMap.remove(groupName);
         if (null != interpreterSettingList) {
+          Collections.sort(interpreterSettingList, new Comparator<InterpreterSetting>() {
+            @Override
+            public int compare(InterpreterSetting o1, InterpreterSetting o2) {
+              return o1.getName().compareTo(o2.getName());
+            }
+          });
+
           for (InterpreterSetting interpreterSetting : interpreterSettingList) {
             orderedSettings.add(interpreterSetting);
           }
