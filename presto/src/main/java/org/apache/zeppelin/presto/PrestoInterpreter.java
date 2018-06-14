@@ -357,7 +357,8 @@ public class PrestoInterpreter extends Interpreter {
       }
       ClientSession clientSession = getClientSession(context.getAuthenticationInfo().getUser());
       StatementClient statementClient =
-              StatementClientFactory.newStatementClient(httpClient, clientSession, queryProcessResult.getQuery());
+              StatementClientFactory.newStatementClient(httpClient, clientSession,
+                      buildQueryComment(context) + "\n" + queryProcessResult.getQuery());
 
       task.sqlStatement = statementClient;
       StringBuilder msg = new StringBuilder();
@@ -427,6 +428,29 @@ public class PrestoInterpreter extends Interpreter {
         }
       }
     }
+  }
+
+  private static String buildQueryComment(InterpreterContext context) {
+    String userId = "";
+    if (context.getAuthenticationInfo() != null) {
+      userId = getUserName(context.getAuthenticationInfo());
+    }
+
+    return "/* From: Zeppelin" +
+            ", UserID: " + userId +
+            ", NoteID: " + context.getNoteId() +
+            ", ParagraphID: " + context.getParagraphId() + " */";
+  }
+
+  private static String getUserName(AuthenticationInfo info) {
+    String uName = "";
+    if (info != null) {
+      uName = info.getUser();
+    }
+    if (uName == null || uName.isEmpty()) {
+      uName = "anonymous";
+    }
+    return uName;
   }
 
   private String resultToCsv(String resultMessage) {
