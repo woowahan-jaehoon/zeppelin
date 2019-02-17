@@ -35,7 +35,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
-
 /**
  * Presto interpreter for Zeppelin.
  */
@@ -62,6 +61,7 @@ public class PrestoInterpreter extends Interpreter {
   private static final String PRESTO_RESULT_PATH = "presto.result.path";
   private static final String PRESTO_RESULT_EXPIRE_SECONDS = "presto.result.expire.sec";
   private static final String PRESTO_HIGHLIGHT_LIMIT = "presto.highlight_limit";
+  private static final List NO_COMPLETION = new ArrayList<>();
 
   static final String LIMIT_QUERY_HEAD = "SELECT * FROM (\n";
   static final String LIMIT_QUERY_TAIL = "\n) ORIGINAL \nLIMIT ";
@@ -653,8 +653,9 @@ public class PrestoInterpreter extends Interpreter {
   }
 
   @Override
-  public List<InterpreterCompletion> completion(String buf, int cursor) {
-    return null;
+  public List<InterpreterCompletion> completion(String buf, int cursor,
+                                                InterpreterContext interpreterContext) {
+    return NO_COMPLETION;
   }
 
   static class ResultFileMeta {
