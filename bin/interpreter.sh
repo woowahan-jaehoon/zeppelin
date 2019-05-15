@@ -47,7 +47,7 @@ while getopts "hp:d:l:v:u:" o; do
             if [[ -z "$ZEPPELIN_IMPERSONATE_CMD" ]]; then
               ZEPPELIN_IMPERSONATE_RUN_CMD=`echo "ssh ${ZEPPELIN_IMPERSONATE_USER}@localhost" `
             else
-              ZEPPELIN_IMPERSONATE_RUN_CMD=$(eval "echo ${ZEPPELIN_IMPERSONATE_CMD} ")
+              ZEPPELIN_IMPERSONATE_RUN_CMD=$(eval "echo ${ZEPPELIN_IMPERSONATE_CMD}")
             fi
             ;;
         esac
@@ -187,7 +187,7 @@ addJarInDirForIntp "${LOCAL_INTERPRETER_REPO}"
 if [[ ! -z "$ZEPPELIN_IMPERSONATE_USER" ]]; then
     suid="$(id -u ${ZEPPELIN_IMPERSONATE_USER})"
     if [[ -n  "${suid}" || -z "${SPARK_SUBMIT}" ]]; then
-       INTERPRETER_RUN_COMMAND=${ZEPPELIN_IMPERSONATE_RUN_CMD}" '"
+       INTERPRETER_RUN_COMMAND=${ZEPPELIN_IMPERSONATE_RUN_CMD}"'"
        if [[ -f "${ZEPPELIN_CONF_DIR}/zeppelin-env.sh" ]]; then
            INTERPRETER_RUN_COMMAND+=" source "${ZEPPELIN_CONF_DIR}'/zeppelin-env.sh;'
        fi
